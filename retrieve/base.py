@@ -1,11 +1,12 @@
 import abc
 
+from ..pipeline import Intersection, Pipeline, Union
+
 __all__ = ["Retriever"]
 
 class Retriever(abc.ABC):
-    """Retriever base class."""
 
-    def __init__(self, attr: str) -> None:
+    def __init__(self, attr: str, k: int) -> None:
         """
         Initialize the retriever with a target attribute
 
@@ -15,17 +16,18 @@ class Retriever(abc.ABC):
         """
         super().__init__()
         self.attr = attr
+        self.k = k
         self.documents = []
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__} retriever"
-            f"\n \t o: {self.attr}"
+            f"\n \t attrs: {self.attr}"
             f"\n \t documents: {len(self)}"
         )
 
     @abc.abstractmethod
-    def __call__(self, q: list, k: int = None) -> list:
+    def __call__(self, **kwargs) -> list:
         """
         Abstract method to retrieve documents
 
@@ -43,7 +45,7 @@ class Retriever(abc.ABC):
         Args:
             documents (list): List of documents to add.
         """
-        pass
+        return self
 
     def __len__(self) -> int:
         """
@@ -51,3 +53,21 @@ class Retriever(abc.ABC):
 
         """
         return len(self.documents)
+    
+    def __add__(self, other):
+        """ Pipeline ops """
+        if isinstance(other, Pipeline):
+            return Pipeline(self, other.models)
+        return Pipeline([self, other])
+
+    def __or__(self, other):
+        """ Union ops """
+        if isinstance(other, Union):
+            return Union([self] + other.models)
+        return Union([self, other])
+
+    def __and__(self, other):
+        """ Intersection ops """
+        if isinstance(other, Intersection):
+            return Intersection([self] + other.models)
+        return Intersection([self, other])
