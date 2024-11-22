@@ -1,27 +1,37 @@
 import abc
 
-from ..pipeline import Intersection, Pipeline, Union
+from ..pipeline import And, Pipeline, Or
+import typing
 
 __all__ = ["Retriever"]
 
 class Retriever(abc.ABC):
 
-    def __init__(self, attr: str, k: int) -> None:
+    def __init__(
+        self,
+        key: str,
+        attr: typing.Union[str, list], 
+        k: typing.Optional[int],
+        batch_size: int,
+    ) -> None:
         """
         Initialize the retriever with a target attribute
 
         Args:
-            on (str): The attributes that affect retrieval
+            attr (str): The attributes that affect retrieval
             documents (list, optional): List of documents
         """
         super().__init__()
-        self.attr = attr
+        self.key = key
+        self.attr = attr if isinstance(attr, list) else [attr]
+        self.documents = None
         self.k = k
-        self.documents = []
+        self.batch_size = batch_size
 
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__} retriever"
+            f"\n \t key: {self.key}"
             f"\n \t attrs: {self.attr}"
             f"\n \t documents: {len(self)}"
         )
@@ -38,36 +48,45 @@ class Retriever(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def add(self, documents: list) -> "Retriever":
-        """
-        Abstract method to add documents to the retriever
-
-        Args:
-            documents (list): List of documents to add.
-        """
-        return self
+    def __call__(
+        self,
+        q: typing.Union[typing.List[str], str],
+        k: typing.Optional[int],
+        batch_size: typing.Optional[int],
+        **kwargs,
+    ) -> typing.Union[
+        typing.List[typing.List[typing.Dict[str, str]]],
+        typing.List[typing.Dict[str, str]],
+    ]:
+        """Retrieve documents from the index"""
+        return []
 
     def __len__(self) -> int:
         """
         Get the number of documents in the retriever
 
         """
-        return len(self.documents)
+        return len(self.documents) if self.documents else 0
     
     def __add__(self, other):
         """ Pipeline ops """
         if isinstance(other, Pipeline):
             return Pipeline(self, other.models)
+        elif isinstance(other, list):
+            # Documents are part of the pipeline
+            return Pipeline(
+                [self, {document[self.key]: document for document in other}]
+            )
         return Pipeline([self, other])
 
     def __or__(self, other):
-        """ Union ops """
-        if isinstance(other, Union):
-            return Union([self] + other.models)
-        return Union([self, other])
+        """ Or ops """
+        if isinstance(other, Or):
+            return Or([self] + other.models)
+        return Or([self, other])
 
     def __and__(self, other):
-        """ Intersection ops """
-        if isinstance(other, Intersection):
-            return Intersection([self] + other.models)
-        return Intersection([self, other])
+        """ And ops """
+        if isinstance(other, And):
+            return And([self] + other.models)
+        return And([self, other])
