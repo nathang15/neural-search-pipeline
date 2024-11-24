@@ -1,93 +1,120 @@
 import typing
-import tqdm
-
-from ..index import Faiss
-from ..utils import yield_batch
+from tqdm import tqdm
+from index.faiss_idx import Faiss
+from utils.batch import iterate_in_batches
 from .base import Retriever
 
 __all__ = ["Encoder"]
 
+
 class Encoder(Retriever):
-    # Retreive documnents based on semantic similarity.
-    # Encodes both queries and documents within a single model, compatible with sentencetransformers or huggingface similiarity models.
-    # Uses Faiss to store pre-computed document embeddings in an index => fast knn search.
+    """
+    Retrieve documents based on semantic similarity.
+
+    Encodes both queries and documents using a single model, compatible with
+    SentenceTransformers or HuggingFace similarity models. Pre-computed document
+    embeddings are stored in a Faiss index for fast k-NN searches.
+    """
 
     def __init__(
         self,
         encoder,
         key: str,
-        attr: typing.Union[str, list],
+        attr: typing.Union[str, typing.List[str]],
         normalize: bool = True,
         k: typing.Optional[int] = None,
         batch_size: int = 64,
-        index = None,
+        index=None,
     ) -> None:
-        super().__init__(
-            key = key,
-            attr = attr,
-            k = k,
-            batch_size = batch_size,
-        )
+        """
+        Initialize the Encoder.
+
+        Args:
+            encoder: The model used for encoding queries and documents.
+            key (str): Unique key to identify documents in the index.
+            attr (Union[str, List[str]]): Attributes to concatenate for encoding.
+            normalize (bool): Whether to normalize embeddings.
+            k (Optional[int]): Number of neighbors to retrieve.
+            batch_size (int): Batch size for encoding.
+            index: Pre-built Faiss index (optional).
+        """
+        super().__init__(key=key, attr=attr, k=k, batch_size=batch_size)
         self.encoder = encoder
-        if not index:
-            self.index = Faiss(key = self.key, normalize = normalize)
-        else:
-            self.index = Faiss(key = self.key, index = index, normalize = normalize)
+        self.index = (
+            Faiss(key=self.key, index=index, normalize=normalize)
+            if index
+            else Faiss(key=self.key, normalize=normalize)
+        )
 
     def __len__(self) -> int:
+        """Return the number of documents in the index."""
         return len(self.index)
-    
+
     def add(
         self,
         documents: typing.List[typing.Dict[str, str]],
         batch_size: int = 64,
         tqdm_bar: bool = True,
-        **kwargs,
     ) -> "Encoder":
-        # add documents to the index
+        """
+        Add documents to the index.
 
-        for batch in yield_batch(
-            array = documents,
-            batch_size = batch_size,
-            desc = f"{self.__class__.__name__} Indexing",
-            tqdm_bar = tqdm_bar,
+        Args:
+            documents (List[Dict[str, str]]): List of documents to index.
+            batch_size (int): Batch size for encoding.
+            tqdm_bar (bool): Whether to display a progress bar.
+
+        Returns:
+            Encoder: The current instance with updated index.
+        """
+        for batch in iterate_in_batches(
+            sequence=documents,
+            batch_size=batch_size,
+            desc=f"{self.__class__.__name__} Indexing",
+            tqdm_bar=tqdm_bar,
         ):
-            self.index.add(
-                documents = batch,
-                embeddings = self.encoder(
-                    [
-                        " ".join([doc.get(field, "") for field in self.attr])
-                        for doc in batch
-                    ]
-                ),
+            embeddings = self.encoder(
+                [
+                    " ".join(doc.get(field, "") for field in self.attr)
+                    for doc in batch
+                ]
             )
+            self.index.add(documents=batch, embeddings=embeddings)
         return self
-    
+
     def __call__(
         self,
         q: typing.Union[typing.List[str], str],
         k: typing.Optional[int] = None,
         batch_size: typing.Optional[int] = None,
         tqdm_bar: bool = True,
-        **kwargs,
     ) -> typing.Union[
         typing.List[typing.List[typing.Dict[str, str]]],
         typing.List[typing.Dict[str, str]],
     ]:
-        # Retrieve k documents from the index from a query or list of queries
-        k = k if k else len(self)
+        """
+        Retrieve documents from the index based on the query.
 
-        rank = []
-        for batch in yield_batch(
-            array = q,
-            batch_size = batch_size if batch_size else self.batch_size,
-            desc = f"{self.__class__.__name__} Retrieving",
-            tqdm_bar = tqdm_bar,
+        Args:
+            q (Union[List[str], str]): Query or list of queries.
+            k (Optional[int]): Number of neighbors to retrieve. Defaults to the index size.
+            batch_size (Optional[int]): Batch size for query encoding.
+            tqdm_bar (bool): Whether to display a progress bar.
+
+        Returns:
+            Union[List[List[Dict[str, str]]], List[Dict[str, str]]]: Retrieved documents.
+        """
+        k = k or len(self)
+        batch_size = batch_size or self.batch_size
+
+        results = []
+        for batch in iterate_in_batches(
+            sequence=[q] if isinstance(q, str) else q,
+            batch_size=batch_size,
+            desc=f"{self.__class__.__name__} Retrieving",
+            tqdm_bar=tqdm_bar,
         ):
-            rank.extend(
-                self.index(
-                    k = k,
-                    embeddings = self.encoder(batch),
-                )
-            )
-        return rank[0] if isinstance(q, str) else rank
+            embeddings = self.encoder(batch)
+            results.extend(self.index(k=k, embeddings=embeddings))
+
+        return results[0] if isinstance(q, str) else results
