@@ -55,6 +55,7 @@ class Encoder(Retriever):
         documents: typing.List[typing.Dict[str, str]],
         batch_size: int = 64,
         tqdm_bar: bool = True,
+        **kwargs,
     ) -> "Encoder":
         """
         Add documents to the index.
