@@ -5,12 +5,58 @@ import time
 from typing import List, Dict, Any
 import torch
 
+## Encoder
+# def main(documents: List[Dict[str, Any]], query: str = "", quantize: bool = False) -> Dict:
+#     metrics = {}
+    
+#     # Time model loading
+#     start_time = time.perf_counter()
+#     model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+#     metrics['model_load'] = time.perf_counter() - start_time
+    
+#     # Time quantization
+#     if quantize:
+#         start_time = time.perf_counter()
+#         encoder = utils.quantizer(model)
+#         metrics['quantization'] = time.perf_counter() - start_time
+#     else:
+#         encoder = model
+#         metrics['quantization'] = 0.0
+        
+#     # Time retriever initialization
+#     start_time = time.perf_counter()
+#     retriever = retrieve.Encoder(
+#         encoder=encoder.encode,
+#         key="id",
+#         attr=["title", "article"],
+#     )
+#     metrics['retriever_init'] = time.perf_counter() - start_time
+    
+#     # Time document indexing
+#     start_time = time.perf_counter()
+#     retriever = retriever.add(documents)
+#     metrics['indexing'] = time.perf_counter() - start_time
+    
+#     # Time search query
+#     start_time = time.perf_counter()
+#     results = retriever(query)
+#     metrics['search'] = time.perf_counter() - start_time
+    
+#     # Calculate total time
+#     metrics['total'] = sum(metrics.values())
+    
+#     return {
+#         'metrics': metrics,
+#         'results': results
+#     }
+
+## DPR
 def main(documents: List[Dict[str, Any]], query: str = "", quantize: bool = False) -> Dict:
     metrics = {}
     
     # Time model loading
     start_time = time.perf_counter()
-    model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+    model = SentenceTransformer("facebook-dpr-ctx_encoder-single-nq-base")
     metrics['model_load'] = time.perf_counter() - start_time
     
     # Time quantization
@@ -24,8 +70,9 @@ def main(documents: List[Dict[str, Any]], query: str = "", quantize: bool = Fals
         
     # Time retriever initialization
     start_time = time.perf_counter()
-    retriever = retrieve.Encoder(
+    retriever = retrieve.DPR(
         encoder=encoder.encode,
+        query_encoder = SentenceTransformer('facebook-dpr-question_encoder-single-nq-base').encode,
         key="id",
         attr=["title", "article"],
     )
@@ -48,6 +95,7 @@ def main(documents: List[Dict[str, Any]], query: str = "", quantize: bool = Fals
         'metrics': metrics,
         'results': results
     }
+
 
 if __name__ == "__main__":
     documents = [
@@ -72,7 +120,7 @@ if __name__ == "__main__":
     ]
     
     # Run with timing
-    results = main(documents, "Ho Chi Minh has 16 urban districts and five rural districts.", quantize=False)
+    results = main(documents, "Ho Chi Minh is also known as Saigon", quantize=False)
     
     # Print detailed timing report
     print("\nPerformance Metrics:")
