@@ -1,8 +1,8 @@
-from .base import Ranker
+from .base import Reranker
 
 __all__ = ["DPR"]
 
-class DPR(Ranker):
+class DPR(Reranker):
     def __init__(self) -> None:
         pass
 

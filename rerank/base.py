@@ -3,9 +3,9 @@ from ..pipeline import Pipeline, And, Or
 import os
 import pickle
 
-__all__ = ["Ranker"]
+__all__ = ["Reranker"]
 
-class Ranker(abc.ABC):
+class Reranker(abc.ABC):
     """Abstract class for ranking models."""
 
     def __init__(self, attr: str, encoder, k: int, path: str, similarity) -> None:

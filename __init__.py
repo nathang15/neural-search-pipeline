@@ -1,1 +1,1 @@
-__all__ = ["rank", "retrieve"]
+__all__ = ["rerank", "retrieve", "utils", "pipeline", "index"]
