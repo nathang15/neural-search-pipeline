@@ -2,9 +2,65 @@ import abc
 from ..pipeline import Pipeline, And, Or
 import os
 import pickle
+import typing
+import numpy as np
+import numpy.typing as npt
 
 __all__ = ["Reranker"]
 
+class EmbeddingCache:
+    """
+    Store embeddings of rerankers
+    """
+
+    def __init__(self, key: str) -> None:
+        self.key = key
+        self.embeddings: typing.Dict[str, npt.NDArray] = {}
+
+    def __len__(self) -> int:
+        return len(self.embeddings)
+
+    def add(
+        self,
+        embeddings: typing.List[npt.NDArray],
+        documents: typing.List[typing.Dict[str, str]],
+        **kwargs,
+    ) -> "EmbeddingCache":
+        """
+        Pre-compute embeddings and store them
+        """
+        for document, embedding in zip(documents, embeddings):
+            self.embeddings[document[self.key]] = embedding
+        return self
+
+    def get(
+        self,
+        documents: typing.List[typing.List[typing.Dict[str, str]]],
+        **kwargs,
+    ) -> typing.Tuple[typing.List[str], typing.List[npt.NDArray], typing.List[typing.Dict[str, str]]]:
+        known: typing.List[str] = []
+        embeddings: typing.List[npt.NDArray] = []
+        unknown: typing.List[typing.Dict[str, str]] = []
+
+        for batch in documents:
+            for document in batch:
+                key = document[self.key]
+                if key in self.embeddings:
+                    known.append(key)
+                    embeddings.append(self.embeddings[key])
+                else:
+                    unknown.append(document)
+        
+        return known, embeddings, unknown
+    
+    def clear(self) -> None:
+        """
+        Clear all stored embeddings.
+        """
+        self.embeddings.clear()
+
+    def contains(self, key: str) -> bool:
+        return key in self.embeddings
 class Reranker(abc.ABC):
     """Abstract class for ranking models."""
 
