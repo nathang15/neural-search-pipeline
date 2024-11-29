@@ -1,5 +1,5 @@
 from .pipeline import Pipeline
-from .and_or import And, Or
+from .and_or_vote import And, Or
 
 """ This is the pipeline module, allowing the user to create a pipeline of multiple models using OR (|) and AND operators (&). """
 
