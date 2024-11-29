@@ -149,12 +149,14 @@ class TfIdf(Retriever):
             batch_match, batch_similarities = self.top_k(similarities, k)
 
             for match, similarities in zip(batch_match, batch_similarities):
-                results.append(
-                    [
-                        {**self.documents[idx], "similarity": similarity}
-                        for idx, similarity in zip(match, similarities)
-                        if similarity > 0
-                    ]
-                )
+                ranked_results = [
+                    {
+                        **self.documents[idx],
+                        "Similarity": similarity,
+                    }
+                    for idx, similarity in zip(match, similarities)
+                    if similarity > 0
+                ]
+                results.append(ranked_results)
 
         return results[0] if isinstance(q, str) else results

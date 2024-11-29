@@ -1,7 +1,7 @@
 import abc
-from ..pipeline import Pipeline, And, Or
+from pipeline import Pipeline, And, Or
 import os
-import typing
+from typing import Dict, List, Union, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 from utils.batch import iterate_in_batches
@@ -14,68 +14,78 @@ class EmbeddingCache:
     Store embeddings of rerankers
     """
 
-    def __init__(self, key: str) -> None:
+    def __init__(
+        self, 
+        key: str, 
+        cache_dir: Optional[str] = None, 
+        max_memory_size: int = 10000
+    ):
         self.key = key
-        self.embeddings: typing.Dict[str, npt.NDArray] = {}
+        self.cache_dir = cache_dir or os.path.join(os.getcwd(), ".embedding_cache")
+        os.makedirs(self.cache_dir, exist_ok=True)
+        
+        self._memory_cache = {}
+        self.max_memory_size = max_memory_size
 
-    def __len__(self) -> int:
-        return len(self.embeddings)
+    def _get_cache_path(self, identifier: str) -> str:
+        return os.path.join(self.cache_dir, f"{identifier}.npy")
 
     def add(
-        self,
-        embeddings: typing.List[npt.NDArray],
-        documents: typing.List[typing.Dict[str, str]],
-        **kwargs,
-    ) -> "EmbeddingCache":
-        """
-        Pre-compute embeddings and store them
-        """
+        self, 
+        embeddings: List[npt.NDArray], 
+        documents: List[Dict[str, str]]
+    ) -> 'EmbeddingCache':
         for document, embedding in zip(documents, embeddings):
-            self.embeddings[document[self.key]] = embedding
+            key = document[self.key]
+            
+            if len(self._memory_cache) >= self.max_memory_size:
+                oldest_key = next(iter(self._memory_cache))
+                del self._memory_cache[oldest_key]
+            
+            self._memory_cache[key] = embedding
+            np.save(self._get_cache_path(key), embedding)
+        
         return self
 
     def get(
-        self,
-        documents: typing.List[typing.List[typing.Dict[str, str]]],
-        **kwargs,
-    ) -> typing.Tuple[typing.List[str], typing.List[npt.NDArray], typing.List[typing.Dict[str, str]]]:
-        known: typing.List[str] = []
-        embeddings: typing.List[npt.NDArray] = []
-        unknown: typing.List[typing.Dict[str, str]] = []
+        self, 
+        documents: List[List[Dict[str, str]]]
+    ) -> Tuple[List[str], List[npt.NDArray], List[Dict[str, str]]]:
+        known, embeddings, unknown = [], [], []
 
         for batch in documents:
             for document in batch:
                 key = document[self.key]
-                if key in self.embeddings:
+                
+                if key in self._memory_cache:
                     known.append(key)
-                    embeddings.append(self.embeddings[key])
+                    embeddings.append(self._memory_cache[key])
+                    continue
+                
+                cache_path = self._get_cache_path(key)
+                if os.path.exists(cache_path):
+                    embedding = np.load(cache_path)
+                    known.append(key)
+                    embeddings.append(embedding)
+                    self._memory_cache[key] = embedding
                 else:
                     unknown.append(document)
         
         return known, embeddings, unknown
-    
-    def clear(self) -> None:
-        """
-        Clear all stored embeddings.
-        """
-        self.embeddings.clear()
-
-    def contains(self, key: str) -> bool:
-        return key in self.embeddings
 
 class Reranker(abc.ABC):
     """Abstract class for ranking models."""
 
     def __init__(
-            self, 
-            key: str,
-            attr: typing.Union[str, typing.List[str]], 
-            encoder, 
-            normalize: bool,
-            batch_size: int,
-            k: typing.Optional[int] = None
+        self, 
+        key: str,
+        attr: Union[str, List[str]], 
+        encoder, 
+        normalize: bool,
+        batch_size: int,
+        k: Optional[int] = None
         ) -> None:
-        self.key = key,
+        self.key = key
         self.attr = attr if isinstance(attr, list) else [attr]
         self.encoder = encoder
         self.store = EmbeddingCache(key=self.key)
@@ -97,14 +107,14 @@ class Reranker(abc.ABC):
     @abc.abstractmethod
     def __call__(
         self,
-        q: typing.Union[typing.List[str], str], 
-        documents: typing.Union[
-            typing.List[typing.List[typing.Dict[str, str]]],
-            typing.List[typing.Dict[str, str]],
+        q: Union[List[str], str], 
+        documents: Union[
+            List[List[Dict[str, str]]],
+            List[Dict[str, str]],
         ],
         k: int,
-        batch_size: typing.Optional[int] = None,
-        **kwargs,) -> typing.Union[typing.List[typing.List[typing.Dict[str, str]]], typing.List[typing.Dict[str, str]]]:
+        batch_size: Optional[int] = None,
+        **kwargs,) -> Union[List[List[Dict[str, str]]], List[Dict[str, str]]]:
         """
         rerank documents based on query
         """
@@ -113,7 +123,7 @@ class Reranker(abc.ABC):
         elif isinstance(q, list):
             return [[]]
     
-    def _encoder(self, documents: typing.List[typing.Dict[str, str]]) -> np.ndarray:
+    def _encoder(self, documents: List[Dict[str, str]]) -> np.ndarray:
         """computes embeddings"""
         return self.encoder(
             [
@@ -123,9 +133,9 @@ class Reranker(abc.ABC):
     
     def _encode(
         self,
-        documents: typing.List[typing.List[typing.Dict[str, str]]],
-        batch_size: typing.Optional[int] = None,
-    ) -> typing.Dict[str, np.ndarray]:
+        documents: List[List[Dict[str, str]]],
+        batch_size: Optional[int] = None,
+    ) -> Dict[str, np.ndarray]:
         """Computes documents embeddings if not yet done"""
         final, embeddings, missed = self.store.get(documents=documents)
         if missed:
@@ -141,7 +151,7 @@ class Reranker(abc.ABC):
 
         return {key: embedding for key, embedding in zip(final, embeddings)}
     
-    def _batch_encode(self, documents: typing.List[typing.Dict[str, str]], batch_size: int, desc: str) -> typing.List[np.ndarray]:
+    def _batch_encode(self, documents: List[Dict[str, str]], batch_size: int, desc: str) -> List[np.ndarray]:
         """computes embeddings in batches"""
         embeddings = []
         for batch in iterate_in_batches(
@@ -152,7 +162,7 @@ class Reranker(abc.ABC):
             embeddings.extend(self._encoder(documents = batch))
         return embeddings
     
-    def add(self, documents: typing.List[typing.Dict[str, str]], batch_size: int = 64) -> "Reranker":
+    def add(self, documents: List[Dict[str, str]], batch_size: int = 64) -> "Reranker":
         """
         Pre-compute embeddings and store them at the path
         """
@@ -168,11 +178,11 @@ class Reranker(abc.ABC):
 
     def rank(
         self,
-        embeddings_documents: typing.Dict[str, np.ndarray],
+        embeddings_documents: Dict[str, np.ndarray],
         embeddings_queries: np.ndarray,
-        documents: typing.List[typing.List[typing.Dict[str, str]]],
+        documents: List[List[Dict[str, str]]],
         k: int,
-        batch_size: typing.Optional[int] = None,
+        batch_size: Optional[int] = None,
     ) -> list: 
         """
         Rank documents based on similarities among returned top k
@@ -236,10 +246,10 @@ class Reranker(abc.ABC):
     def encode_rank(
         self,
         embeddings_queries: np.ndarray,
-        documents: typing.List[typing.List[typing.Dict[str, str]]],
+        documents: List[List[Dict[str, str]]],
         k: int,
-        batch_size: typing.Optional[int] = None,
-    ) -> typing.List[typing.List[typing.Dict[str, str]]]:
+        batch_size: Optional[int] = None,
+    ) -> List[List[Dict[str, str]]]:
         """ Encoder documents and rerank based on the query """
         embeddings_documents = self._encode(documents=documents, batch_size=batch_size)
         return self.rank(

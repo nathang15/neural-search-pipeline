@@ -2,5 +2,6 @@
 
 from .base import Reranker
 from .dpr import DPR
+from .encoder import Encoder
 
-__all__ = ["DPR", "Encoder", "Embedding"]
+__all__ = ["Reranker", "Encoder"]
