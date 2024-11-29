@@ -24,7 +24,7 @@ class EmbeddingCache:
         self.cache_dir = cache_dir or os.path.join(os.getcwd(), ".embedding_cache")
         os.makedirs(self.cache_dir, exist_ok=True)
         
-        self._memory_cache = {}
+        self.embeddings  = {}
         self.max_memory_size = max_memory_size
 
     def _get_cache_path(self, identifier: str) -> str:
@@ -33,16 +33,17 @@ class EmbeddingCache:
     def add(
         self, 
         embeddings: List[npt.NDArray], 
-        documents: List[Dict[str, str]]
+        documents: List[Dict[str, str]],
+        **kwargs,
     ) -> 'EmbeddingCache':
         for document, embedding in zip(documents, embeddings):
             key = document[self.key]
             
-            if len(self._memory_cache) >= self.max_memory_size:
-                oldest_key = next(iter(self._memory_cache))
-                del self._memory_cache[oldest_key]
+            if len(self.embeddings) >= self.max_memory_size:
+                oldest_key = next(iter(self.embeddings))
+                del self.embeddings[oldest_key]
             
-            self._memory_cache[key] = embedding
+            self.embeddings[key] = embedding
             np.save(self._get_cache_path(key), embedding)
         
         return self
@@ -57,9 +58,9 @@ class EmbeddingCache:
             for document in batch:
                 key = document[self.key]
                 
-                if key in self._memory_cache:
+                if key in self.embeddings:
                     known.append(key)
-                    embeddings.append(self._memory_cache[key])
+                    embeddings.append(self.embeddings[key])
                     continue
                 
                 cache_path = self._get_cache_path(key)
@@ -67,7 +68,7 @@ class EmbeddingCache:
                     embedding = np.load(cache_path)
                     known.append(key)
                     embeddings.append(embedding)
-                    self._memory_cache[key] = embedding
+                    self.embeddings[key] = embedding
                 else:
                     unknown.append(document)
         
