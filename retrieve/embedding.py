@@ -2,8 +2,8 @@ import typing
 
 import numpy as np
 
-from index.faiss_idx import Faiss
-from utils.batch import iterate_in_batches
+from ..index.faiss_idx import Faiss
+from ..utils.batch import iterate_in_batches
 from .base import Retriever
 
 __all__ = ["Embedding"]

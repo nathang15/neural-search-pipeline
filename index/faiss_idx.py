@@ -2,7 +2,7 @@ import typing
 
 import numpy as np
 
-from utils.batch import iterate_in_batches
+from ..utils.batch import iterate_in_batches
 
 __all__ = ["Faiss"]
 

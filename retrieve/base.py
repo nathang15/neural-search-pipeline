@@ -1,6 +1,6 @@
 import abc
 
-from pipeline import And, Pipeline, Or
+from ..pipeline import And, Pipeline, Or
 import typing
 
 __all__ = ["Retriever"]

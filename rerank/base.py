@@ -1,10 +1,10 @@
 import abc
-from pipeline import Pipeline, And, Or
+from ..pipeline import Pipeline, And, Or
 import os
 from typing import Dict, List, Union, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
-from utils.batch import iterate_in_batches
+from ..utils.batch import iterate_in_batches
 import tqdm
 
 __all__ = ["Reranker"]

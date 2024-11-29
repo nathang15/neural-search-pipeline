@@ -5,7 +5,7 @@ from scipy.sparse import csr_matrix, hstack
 from functools import lru_cache
 
 from lenlp import sparse
-from utils.batch import iterate_in_batches
+from ..utils.batch import iterate_in_batches
 from .base import Retriever
 
 __all__ = ["TfIdf"]

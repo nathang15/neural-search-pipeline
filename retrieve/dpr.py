@@ -2,8 +2,8 @@ from typing import List, Dict, Union, Optional
 
 import tqdm
 
-from index.faiss_idx import Faiss
-from utils.batch import iterate_in_batches
+from ..index.faiss_idx import Faiss
+from ..utils.batch import iterate_in_batches
 from .base import Retriever
 
 class DPR(Retriever):

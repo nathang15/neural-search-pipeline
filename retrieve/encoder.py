@@ -1,7 +1,7 @@
 import typing
 from tqdm import tqdm
-from index.faiss_idx import Faiss
-from utils.batch import iterate_in_batches
+from ..index.faiss_idx import Faiss
+from ..utils.batch import iterate_in_batches
 from .base import Retriever
 
 __all__ = ["Encoder"]
