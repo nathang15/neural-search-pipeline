@@ -1,18 +1,17 @@
-__all__ = ["Encoder"]
-
-import typing
-
+from typing import TypeVar, Union, List, Dict, Optional
 from .base import EmbeddingCache, Reranker
 
-class Encoder(Reranker):
+__all__ = ["Encoder"]
 
+
+class Encoder(Reranker):
     def __init__(
         self,
-        attr: typing.Union[str, typing.List[str]],
+        attr: Union[str, List[str]],
         key: str,
         encoder,
         normalize: bool = True,
-        k: typing.Optional[int] = None,
+        k: Optional[int] = None,
         batch_size: int = 64,
     ) -> None:
         super().__init__(
@@ -26,35 +25,28 @@ class Encoder(Reranker):
 
     def __call__(
         self,
-        q: typing.Union[typing.List[str], str],
-        documents: typing.Union[
-            typing.List[typing.List[typing.Dict[str, str]]],
-            typing.List[typing.Dict[str, str]],
-        ],
-        k: typing.Optional[int] = None,
-        batch_size: typing.Optional[int] = None,
+        q: Union[List[str], str],
+        documents: Union[List[List[Dict[str, str]]], List[Dict[str, str]]],
+        k: Optional[int] = None,
+        batch_size: Optional[int] = None,
         **kwargs
-    ) -> typing.Union[
-        typing.List[typing.List[typing.Dict[str, str]]],
-        typing.List[typing.Dict[str, str]],
-    ]:
-        if k is None:
-            k = self.k
+    ) -> Union[List[List[Dict[str, str]]], List[Dict[str, str]]]:
+        k = k or self.k or len(self)
+        
+        if not documents:
+            return [] if isinstance(q, str) else [[]]
 
-        if k is None:
-            k = len(self)
-
-        if not documents and isinstance(q, str):
-            return []
-
-        if not documents and isinstance(q, list):
-            return [[]]
-
+        queries = [q] if isinstance(q, str) else q
+        
+        embeddings_queries = self.encoder(queries)
+        
+        processed_documents = [documents] if isinstance(q, str) else documents
+        
         rank = self.encode_rank(
-            embeddings_queries=self.encoder([q] if isinstance(q, str) else q),
-            documents=[documents] if isinstance(q, str) else documents,
+            embeddings_queries=embeddings_queries,
+            documents=processed_documents,
             k=k,
-            batch_size=batch_size if batch_size is not None else self.batch_size,
+            batch_size=batch_size or self.batch_size,
         )
 
         return rank[0] if isinstance(q, str) else rank
