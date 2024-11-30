@@ -217,7 +217,7 @@ class Pipeline(Make):
                     {
                         **documents.get(document[self.key], {}),
                         self.key: document[self.key],
-                        "similarity": document["similarity"],
+                        "Similarity": document["Similarity"],
                     }
                     for document in query_document
                 ]

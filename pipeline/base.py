@@ -126,11 +126,11 @@ def rank_union(
             key_value = document[key]
 
             if key_value not in query_seen:
-                # Remove similarity
-                document.pop("similarity")
+                # Remove Similarity
+                document.pop("Similarity")
 
                 # Append the document with it's new score
-                query_rank.append({**document, "similarity": scores_query[key_value]})
+                query_rank.append({**document, "Similarity": scores_query[key_value]})
 
                 # Seen document
                 query_seen[key_value] = True
@@ -158,11 +158,11 @@ def rank_intersection(
             key_value = document[key]
 
             if key_value not in query_seen and counter_query[key_value] == len(models):
-                # Remove similarity
-                document.pop("similarity")
+                # Remove Similarity
+                document.pop("Similarity")
 
                 # Append the document with it's new score
-                query_rank.append({**document, "similarity": scores_query[key_value]})
+                query_rank.append({**document, "Similarity": scores_query[key_value]})
 
                 # Seen document
                 query_seen[key_value] = True
@@ -183,7 +183,7 @@ def rank_vote(
         index = {document[key]: document for document in documents_query}
         for key_value in sorted(scores_query, key=scores_query.get, reverse=True):
             document = index[key_value]
-            document.pop("similarity")
-            query_rank.append({**document, "similarity": scores_query[key_value]})
+            document.pop("Similarity")
+            query_rank.append({**document, "Similarity": scores_query[key_value]})
         queries_rank.append(query_rank)
     return queries_rank
