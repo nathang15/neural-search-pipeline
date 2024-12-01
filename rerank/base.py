@@ -6,13 +6,11 @@ import numpy as np
 import numpy.typing as npt
 from ..utils.batch import iterate_in_batches
 import tqdm
-
+import hashlib
 __all__ = ["Reranker"]
 
 class EmbeddingCache:
-    """
-    Store embeddings of rerankers
-    """
+    """Store embeddings of rerankers with safe file handling."""
 
     def __init__(
         self, 
@@ -24,11 +22,19 @@ class EmbeddingCache:
         self.cache_dir = cache_dir or os.path.join(os.getcwd(), ".embedding_cache")
         os.makedirs(self.cache_dir, exist_ok=True)
         
-        self.embeddings  = {}
+        self.embeddings = {}
         self.max_memory_size = max_memory_size
 
+    def _create_safe_filename(self, identifier: str) -> str:
+        """Create a safe filename from any identifier string."""
+        # Create a hash of the identifier to ensure a safe, unique filename
+        hash_object = hashlib.md5(identifier.encode())
+        return hash_object.hexdigest() + '.npy'
+
     def _get_cache_path(self, identifier: str) -> str:
-        return os.path.join(self.cache_dir, f"{identifier}.npy")
+        """Get the safe cache path for an identifier."""
+        safe_filename = self._create_safe_filename(identifier)
+        return os.path.join(self.cache_dir, safe_filename)
 
     def add(
         self, 
@@ -44,7 +50,8 @@ class EmbeddingCache:
                 del self.embeddings[oldest_key]
             
             self.embeddings[key] = embedding
-            np.save(self._get_cache_path(key), embedding)
+            cache_path = self._get_cache_path(key)
+            np.save(cache_path, embedding)
         
         return self
 
@@ -146,7 +153,6 @@ class Reranker(abc.ABC):
                 desc=f"{self.__class__.__name__} Indexing missed documents",
             )
 
-            # Merge
             final += [document[self.key] for document in missed]
             embeddings = embeddings + missed_embeddings
 
@@ -184,36 +190,27 @@ class Reranker(abc.ABC):
         documents: List[List[Dict[str, str]]],
         k: int,
         batch_size: Optional[int] = None,
-    ) -> list: 
-        """
-        Rank documents based on similarities among returned top k
-        """
-        # Reshape if needed
+    ) -> list:
         if len(embeddings_queries.shape) == 1:
             embeddings_queries = embeddings_queries.reshape(1, -1)
 
-        # Normalize embeddings for cosine similarity
         if self.normalize:
-            embeddings_queries = (
-                embeddings_queries
-                / np.linalg.norm(embeddings_queries, axis=-1)[:, None]
-            )
+            embeddings_queries = embeddings_queries / (np.linalg.norm(embeddings_queries, axis=-1)[:, None] + 1e-8)
 
-        # Compute sim scores
         scores, missing = [], []
         for q, batch in tqdm.tqdm(
             zip(embeddings_queries, documents), position=0, desc="Ranker scoring"
         ):
             if batch:
-                scores.append(
-                    q
-                    @ np.stack(
-                        [embeddings_documents[d[self.key]] for d in batch], axis=0
-                    ).T
-                )
+                doc_embeddings = np.stack([embeddings_documents[d[self.key]] for d in batch], axis=0)
+                
+                if self.normalize:
+                    doc_embeddings = doc_embeddings / (np.linalg.norm(doc_embeddings, axis=1, keepdims=True) + 1e-8)
+                
+                similarity_scores = np.clip(q @ doc_embeddings.T, -1.0, 1.0)
+                scores.append(similarity_scores)
                 missing.append(False)
             else:
-                # Did not find any doc for the query
                 scores.append(np.array([]))
                 missing.append(True)
 
@@ -226,21 +223,29 @@ class Reranker(abc.ABC):
                 continue
 
             scores_query = scores_query.reshape(1, -1)
-            ranks_query = np.fliplr(np.argsort(scores_query))
-            scores_query, ranks_query = scores_query.flatten(), ranks_query.flatten()
+            
+            temperature = 0.5
+            exp_scores = np.exp(scores_query / temperature)
+            softmax_scores = exp_scores / (np.sum(exp_scores) + 1e-8)
+            
+            ranks_query = np.fliplr(np.argsort(softmax_scores))
+            scores_query, ranks_query = softmax_scores.flatten(), ranks_query.flatten()
             ranks_query = ranks_query[:k]
-            ranked.append(
-                [
-                    {
-                        **document,
-                        "Similarity": similarity,
-                    }
-                    for document, similarity in zip(
-                        np.take(documents_query, ranks_query),
-                        np.take(scores_query, ranks_query),
-                    )
-                ]
-            )
+
+            ranked_docs = []
+            for document, similarity in zip(
+                np.take(documents_query, ranks_query),
+                np.take(scores_query, ranks_query),
+            ):
+                ranked_doc = document.copy()
+                ranked_doc["similarity"] = float(similarity)
+                ranked_docs.append(ranked_doc)
+            
+            # Filter out low confidence matches
+            confidence_threshold = 0.01
+            ranked_docs = [doc for doc in ranked_docs if doc["similarity"] > confidence_threshold]
+            
+            ranked.append(ranked_docs)
 
         return ranked
     
